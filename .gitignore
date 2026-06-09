@@ -1,0 +1,24 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Q-Learning Models & Data (Evita subir pesos pesados o archivos locales)
+*.pkl
+*.pickle
+
+# Docker logs
+*.log
+
+# IDEs and editors
+.vscode/
+.idea/

@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  q_learning_game:
+    build: .
+    container_name: q_learning_container
+    volumes:
+      # Mapea el directorio actual para recuperar el archivo 'modelo_q.pkl' generado
+      - .:/app
