@@ -1,0 +1,19 @@
+<div id="game-board" style="display: grid; grid-template-columns: repeat({{ columnas }}, 45px); grid-template-rows: repeat({{ filas }}, 45px); gap: 3px; background: #11111b; padding: 12px; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
+    {% for f in range(filas) %}
+        {% for c in range(columnas) %}
+            {% set celda = grid[f][c] %}
+            
+            <div class="cell {% if celda == '#' %}borde-bloque{% else %}terreno-{{ celda }}{% endif %}" 
+                 style="width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.1rem;">
+                
+                {% if (f, c) == (pos_j[0], pos_j[1]) or celda == 'A' %}
+                    <span style="color: #89b4fa; font-size: 1.3rem; font-weight: 900;">A</span>
+                {% elif (f, c) == (pos_e[0], pos_e[1]) or celda == 'B' %}
+                    <span style="color: #f9e2af; font-size: 1.3rem; font-weight: 900;">B</span>
+                {% else %}
+                    {{ celda if celda not in ['.', '#'] else '' }}
+                {% endif %}
+            </div>
+        {% endfor %}
+    {% endfor %}
+</div>

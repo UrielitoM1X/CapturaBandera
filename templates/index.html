@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Q-Learning Sandbox 10x10</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background: #181825; 
+            color: #cdd6f4; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            padding-top: 30px; 
+            margin: 0;
+        }
+        h1 { color: #cba6f7; margin-bottom: 5px; }
+        .sub { color: #a6adc8; margin-bottom: 20px; font-size: 0.95rem; }
+        
+        .panel-controles {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .btn { 
+            background: #89b4fa; 
+            color: #11111b; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            font-size: 0.95rem; 
+            transition: background 0.2s; 
+        }
+        .btn:hover { background: #b4befe; }
+        .btn-ia { background: #a6e3a1; }
+        .btn-ia:hover { background: #94e2d5; }
+        
+        /* Caja de estado del turno y puntos de acción */
+        .info-box {
+            background: #252538; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin-bottom: 25px; 
+            font-family: monospace; 
+            display: flex; 
+            gap: 35px; 
+            justify-content: center; 
+            border: 1px solid #45475a;
+        }
+
+        /* Pad de Movimiento Manual */
+        .control-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 45px);
+            grid-template-rows: repeat(2, 45px);
+            gap: 5px;
+            margin-bottom: 25px;
+        }
+        .pad-btn {
+            background: #45475a;
+            color: #cdd6f4;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+            font-size: 1.1rem;
+        }
+        .pad-btn:hover { background: #585b70; }
+
+        /* REJILLA DEL MAPA */
+        #game-board {
+            display: grid; 
+            grid-template-columns: repeat({{ columnas }}, 45px); 
+            grid-template-rows: repeat({{ filas }}, 45px); 
+            gap: 3px; 
+            background: #11111b; 
+            padding: 12px; 
+            border-radius: 10px; 
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+
+        .cell { 
+            background: #1e1e2e; 
+            border-radius: 4px;
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-weight: bold; 
+            font-size: 1.1rem;
+        } 
+
+        .terreno-X { 
+            background: #f38ba8 !important; 
+            box-shadow: 0 0 8px rgba(243, 139, 168, 0.4);
+        } 
+
+        .terreno-T { 
+            background: #fab387 !important; 
+            box-shadow: 0 0 8px rgba(250, 179, 135, 0.3);
+        } 
+
+        /* Mimetiza el marco perimetral con el fondo de la pantalla */
+        .borde-bloque { 
+            background: transparent !important; 
+        }
+
+        .anuncio-ganador {
+            margin-top: 20px;
+            color: #f38ba8;
+            font-weight: bold;
+            font-size: 1.3rem;
+            background: #252538;
+            padding: 10px 20px;
+            border-radius: 6px;
+            border: 1px solid #f38ba8;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Tablero Q-Learning</h1>
+    <div class="sub">Estrategia por Turnos | Zona jugable 10x10</div>
+    
+    <div class="info-box">
+        <div>Turno de: <span style="color: #cba6f7; font-weight: bold;">{{ turno }}</span></div>
+        <div>Puntos de Acción: <span style="color: #a6e3a1; font-weight: bold;">{{ puntos_accion }} / 4 PA</span></div>
+    </div>
+
+    <div class="panel-controles">
+        <form action="/reiniciar" method="POST">
+            <button type="submit" class="btn">Regenerar Laberinto</button>
+        </form>
+        <form action="/entrenar" method="POST">
+            <button type="submit" class="btn btn-ia">Entrenar Cerebro (Auto-Entrenamiento)</button>
+        </form>
+    </div>
+
+    <div class="control-pad">
+        <div style="grid-column: 2">
+            <form action="/mover/0" method="POST"><button class="pad-btn">▲</button></form>
+        </div>
+        <div style="grid-row: 2; grid-column: 1">
+            <form action="/mover/2" method="POST"><button class="pad-btn">◀</button></form>
+        </div>
+        <div style="grid-row: 2; grid-column: 2">
+            <form action="/mover/1" method="POST"><button class="pad-btn">▼</button></form>
+        </div>
+        <div style="grid-row: 2; grid-column: 3">
+            <form action="/mover/3" method="POST"><button class="pad-btn">▶</button></form>
+        </div>
+    </div>
+
+    <div id="game-board">
+        {% for f in range(filas) %}
+            {% for c in range(columnas) %}
+                {% set celda = grid[f][c] %}
+                
+                <div class="cell {% if celda == '#' %}borde-bloque{% else %}terreno-{{ celda }}{% endif %}">
+                    
+                    {% if [f, c] == pos_j %}
+                        <span style="color: #89b4fa; font-size: 1.3rem; font-weight: 900;">A</span>
+                    {% elif [f, c] == pos_e %}
+                        <span style="color: #f9e2af; font-size: 1.3rem; font-weight: 900;">B</span>
+                    {% else %}
+                        {{ celda if celda not in ['.', '#'] else '' }}
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% endfor %}
+    </div>
+
+    {% if ganador %}
+        <div class="anuncio-ganador">{{ ganador }}</div>
+    {% endif %}
+
+</body>
+</html>

@@ -1,9 +1,12 @@
 version: '3.8'
 
 services:
-  q_learning_game:
+  q_learning_app:
     build: .
-    container_name: q_learning_container
+    container_name: qlearning_hotwire_server
+    ports:
+      - "8000:8000"
     volumes:
-      # Mapea el directorio actual para recuperar el archivo 'modelo_q.pkl' generado
       - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1

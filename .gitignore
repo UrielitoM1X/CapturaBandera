@@ -12,13 +12,14 @@ venv/
 ENV/
 env/
 
-# Q-Learning Models & Data (Evita subir pesos pesados o archivos locales)
+# Q-Learning Models & Checkpoints
 *.pkl
 *.pickle
 
 # Docker logs
 *.log
 
-# IDEs and editors
+# IDEs and Editors
 .vscode/
 .idea/
+.obsidian/

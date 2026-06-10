@@ -1,11 +1,11 @@
-# Usamos una versión ligera y moderna de Python
 FROM python:3.11-slim
 
-# Establecer el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
-# Copiar el script del entorno al contenedor
-COPY app.py .
+RUN pip install --no-cache-dir fastapi uvicorn jinja2
 
-# Comando por defecto para ejecutar el entrenamiento e integración general
-CMD ["python", "app.py"]
+COPY . .
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
