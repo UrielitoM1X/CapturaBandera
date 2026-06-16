@@ -1,8 +1,8 @@
-# --- agent.py ---
+# --- codes/agent.py ---
 import numpy as np
 import random
 import pickle
-from settings import ACTIONS
+from codes.settings import ACTIONS
 
 class QAgent:
     def __init__(self, alpha=0.2, gamma=0.95, eps=1.0, eps_min=0.05, eps_decay=0.9998):

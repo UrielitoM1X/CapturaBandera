@@ -1,20 +1,45 @@
-# --- environment.py ---
+# --- codes/environment.py ---
 import numpy as np
 import random
 from collections import deque
-from settings import *
+from codes.settings import *
 
 def bfs_connected(grid, start, goal):
-    # ---> Pega aquí tu función bfs_connected <---
-    pass
+    q = deque([start]); seen = {start}
+    while q:
+        r, c = q.popleft()
+        if (r, c) == goal: return True
+        for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+            nr, nc = r+dr, c+dc
+            if 0 <= nr < SIZE and 0 <= nc < SIZE and (nr,nc) not in seen and grid[nr][nc] != WALL:
+                seen.add((nr,nc)); q.append((nr,nc))
+    return False
 
-def carve_corridor(grid, a, b):
-    # ---> Pega aquí tu función carve_corridor <---
-    pass
-
-def parse_map(text):
-    # ---> Pega aquí tu función parse_map <---
-    pass
+# GENERADOR ALEATORIO DE MAPAS
+def generate_random_map():
+    """Genera mapas aleatorios hasta que encuentra uno con un camino válido entre bases."""
+    while True:
+        grid = []
+        for r in range(SIZE):
+            row = []
+            for c in range(SIZE):
+                # Probabilidades: 70% vacio, 15% lodo, 15% pared
+                prob = random.random()
+                if prob < 0.70:
+                    row.append(EMPTY)
+                elif prob < 0.85:
+                    row.append(DIRT)
+                else:
+                    row.append(WALL)
+            grid.append(row)
+        
+        # Asegurar que los spawns esten libres
+        grid[0][0] = EMPTY
+        grid[SIZE-1][SIZE-1] = EMPTY
+        
+        # Validador
+        if bfs_connected(grid, (0,0), (SIZE-1,SIZE-1)):
+            return grid
 
 class CTFEnv:
     def __init__(self, grid):
@@ -28,11 +53,13 @@ class CTFEnv:
         self.hum = self.base_hum
         self.ia_flag = False
         self.hum_flag = False
-        self.ia_points = MOVE_POINTS    # puntos restantes de la IA en su turno
+        self.ia_points = MOVE_POINTS
+        self.hum_points = MOVE_POINTS
+        self.turn = 'ia' 
         self.done = False
         self.winner = None
         self.last_hits = []
-        return self.get_state()
+        return self.get_state(self.turn)
 
     def passable(self, pos):
         r, c = pos
@@ -41,6 +68,9 @@ class CTFEnv:
     def ia_goal(self):
         return self.base_hum if not self.ia_flag else self.base_ia
 
+    def hum_goal(self):
+        return self.base_ia if not self.hum_flag else self.base_hum
+
     def _rel_dir(self, frm, to):
         return (int(np.sign(to[0]-frm[0])), int(np.sign(to[1]-frm[1])))
 
@@ -48,41 +78,37 @@ class CTFEnv:
     def manh(a, b):
         return abs(a[0]-b[0]) + abs(a[1]-b[1])
 
-    def get_state(self):
-        goal = self.ia_goal()
-        d_goal = min(self.manh(self.ia, goal), 9)
-        d_opp = min(self.manh(self.ia, self.hum), 9)
-        return (self.ia, self.hum, int(self.ia_flag), int(self.hum_flag),
-                self._rel_dir(self.ia, goal), d_goal, d_opp, self.ia_points)
+    def get_state(self, who='ia'):
+        if who == 'ia':
+            goal = self.ia_goal()
+            d_goal = min(self.manh(self.ia, goal), 9)
+            d_opp = min(self.manh(self.ia, self.hum), 9)
+            return (self.ia, self.hum, int(self.ia_flag), int(self.hum_flag),
+                    self._rel_dir(self.ia, goal), d_goal, d_opp, self.ia_points)
+        else:
+            goal = self.hum_goal()
+            d_goal = min(self.manh(self.hum, goal), 9)
+            d_opp = min(self.manh(self.hum, self.ia), 9)
+            return (self.hum, self.ia, int(self.hum_flag), int(self.ia_flag),
+                    self._rel_dir(self.hum, goal), d_goal, d_opp, self.hum_points)
 
     def _try_move(self, pos, action, points):
-        """Devuelve (nueva_pos, choco)."""
         dr, dc = MOVE[action]
-        if (dr, dc) == (0, 0):
-            return pos, False
         npos = (pos[0]+dr, pos[1]+dc)
-        if not self.passable(npos):
-            return pos, True
+        if not self.passable(npos): return pos, True
         c = COST[self.grid[npos[0]][npos[1]]]
-        if c > points:
-            return pos, False
+        if c > points: return pos, False
         return npos, False
 
     def _capture_logic(self):
-        if not self.ia_flag and self.ia == self.base_hum:
-            self.ia_flag = True
-        if self.ia_flag and self.ia == self.base_ia:
-            self.done = True; self.winner = 'ia'
-        if not self.hum_flag and self.hum == self.base_ia:
-            self.hum_flag = True
-        if self.hum_flag and self.hum == self.base_hum:
-            self.done = True; self.winner = 'humano'
+        if not self.ia_flag and self.ia == self.base_hum: self.ia_flag = True
+        if self.ia_flag and self.ia == self.base_ia: self.done = True; self.winner = 'ia'
+        if not self.hum_flag and self.hum == self.base_ia: self.hum_flag = True
+        if self.hum_flag and self.hum == self.base_hum: self.done = True; self.winner = 'humano'
 
     def _send_home(self, who):
-        if who == 'ia':
-            self.ia = self.base_ia; self.ia_flag = False
-        else:
-            self.hum = self.base_hum; self.hum_flag = False
+        if who == 'ia': self.ia = self.base_ia; self.ia_flag = False
+        else: self.hum = self.base_hum; self.hum_flag = False
 
     def _fire_cannon(self):
         cells = [(r,c) for r in range(SIZE) for c in range(SIZE) if self.grid[r][c] != WALL]
@@ -91,85 +117,70 @@ class CTFEnv:
             if self.ia == h: self._send_home('ia')
             if self.hum == h: self._send_home('hum')
 
-    def _human_policy(self):
-        """Humano simple: avanza hacia su objetivo gastando sus 4 puntos."""
-        goal = self.base_ia if not self.hum_flag else self.base_hum
-        points = MOVE_POINTS
-        for _ in range(MOVE_POINTS):
-            best, bestd = 'STAY', self.manh(self.hum, goal)
-            for a in ['UP','DOWN','LEFT','RIGHT']:
-                np_, choc = self._try_move(self.hum, a, points)
-                if not choc and np_ != self.hum:
-                    d = self.manh(np_, goal)
-                    if d < bestd:
-                        best, bestd = a, d
-            np_, _ = self._try_move(self.hum, best, points)
-            if np_ == self.hum:
-                break
-            points -= COST[self.grid[np_[0]][np_[1]]]
-            self.hum = np_
-            self._capture_logic()
-            if self.done:
-                return
-
-    def _end_ia_turn(self):
-        """Cierra el turno de la IA: mueve al humano, dispara canon y recarga puntos."""
-        reward = 0.0
-        self._human_policy()
-        if self.ia == self.hum:
-            self._send_home('ia')
-        if self.hum_flag:
-            reward -= 0.2
-        if self.done and self.winner == 'humano':
-            reward -= 30.0
-            return reward
-        self._fire_cannon()
-        self.ia_points = MOVE_POINTS
-        return reward
-
     def step(self, action):
-        """Una accion de la IA (consume puntos). El humano y el canon solo
-        actuan cuando la IA agota su turno (STAY, sin puntos o choque)."""
-        reward = -0.05
-        prev_goal_d = self.manh(self.ia, self.ia_goal())
-        had_flag = self.ia_flag
+        reward = -0.05 
         end_turn = False
+        
+        prev_goal_d_ia = self.manh(self.ia, self.ia_goal())
+        prev_goal_d_hum = self.manh(self.hum, self.hum_goal())
+        had_flag_ia = self.ia_flag
+        had_flag_hum = self.hum_flag
 
-        if action == 'STAY':
-            reward -= 0.1
-            end_turn = True
-        else:
+        if self.turn == 'ia':
             npos, choc = self._try_move(self.ia, action, self.ia_points)
+            
             if choc:
-                reward -= 0.3
-                end_turn = True
+                reward -= 0.3 
+                self.ia_points -= 1 
             elif npos == self.ia:
-                # no alcanzan los puntos para moverse: termina el turno
-                end_turn = True
+                end_turn = True 
             else:
                 self.ia_points -= COST[self.grid[npos[0]][npos[1]]]
                 self.ia = npos
                 self._capture_logic()
+                if self.ia == self.hum:
+                    reward += 1.0 
+                    self._send_home('hum')
 
-        if self.ia_flag and not had_flag:
-            reward += 5.0
-        new_goal_d = self.manh(self.ia, self.ia_goal())
-        if new_goal_d < prev_goal_d:
-            reward += 0.2
-        if self.ia == self.hum:
-            reward += 1.0
-            self._send_home('hum')
-
-        if self.done:
-            reward += 50.0 if self.winner == 'ia' else 0.0
-            return self.get_state(), reward, True, {}
-
-        if self.ia_points <= 0:
-            end_turn = True
-
-        if end_turn:
-            reward += self._end_ia_turn()
+            if self.ia_flag and not had_flag_ia: reward += 5.0
+            if self.manh(self.ia, self.ia_goal()) < prev_goal_d_ia: reward += 0.2
+            
             if self.done:
-                return self.get_state(), reward, True, {}
+                reward += 50.0 if self.winner == 'ia' else -30.0
+                return self.get_state('ia'), reward, True, {}
+                
+            if self.ia_points <= 0: end_turn = True
+            if end_turn: self.turn = 'hum'
 
-        return self.get_state(), reward, self.done, {}
+        else: 
+            npos, choc = self._try_move(self.hum, action, self.hum_points)
+            
+            if choc:
+                reward -= 0.3 
+                self.hum_points -= 1 
+            elif npos == self.hum:
+                end_turn = True 
+            else:
+                self.hum_points -= COST[self.grid[npos[0]][npos[1]]]
+                self.hum = npos
+                self._capture_logic()
+                if self.hum == self.ia:
+                    reward += 1.0 
+                    self._send_home('ia')
+
+            if self.hum_flag and not had_flag_hum: reward += 5.0
+            if self.manh(self.hum, self.hum_goal()) < prev_goal_d_hum: reward += 0.2
+
+            if self.done:
+                reward += 50.0 if self.winner == 'humano' else -30.0
+                return self.get_state('hum'), reward, True, {}
+                
+            if self.hum_points <= 0: end_turn = True
+            if end_turn:
+                if self.ia_flag or self.hum_flag:
+                    self._fire_cannon()
+                self.ia_points = MOVE_POINTS
+                self.hum_points = MOVE_POINTS
+                self.turn = 'ia'
+                
+        return self.get_state(self.turn), reward, self.done, {}
