@@ -15,29 +15,21 @@ def bfs_connected(grid, start, goal):
                 seen.add((nr,nc)); q.append((nr,nc))
     return False
 
-# GENERADOR ALEATORIO DE MAPAS
 def generate_random_map():
-    """Genera mapas aleatorios hasta que encuentra uno con un camino válido entre bases."""
     while True:
         grid = []
         for r in range(SIZE):
             row = []
             for c in range(SIZE):
-                # Probabilidades: 70% vacio, 15% lodo, 15% pared
                 prob = random.random()
-                if prob < 0.70:
-                    row.append(EMPTY)
-                elif prob < 0.85:
-                    row.append(DIRT)
-                else:
-                    row.append(WALL)
+                if prob < 0.70: row.append(EMPTY)
+                elif prob < 0.85: row.append(DIRT)
+                else: row.append(WALL)
             grid.append(row)
         
-        # Asegurar que los spawns esten libres
         grid[0][0] = EMPTY
         grid[SIZE-1][SIZE-1] = EMPTY
         
-        # Validador
         if bfs_connected(grid, (0,0), (SIZE-1,SIZE-1)):
             return grid
 
@@ -78,26 +70,49 @@ class CTFEnv:
     def manh(a, b):
         return abs(a[0]-b[0]) + abs(a[1]-b[1])
 
+    # --- NUEVA VISIÓN DE RADAR ---
+    def _get_local_vision(self, pos):
+        """Devuelve qué hay exactamente 1 paso arriba, abajo, izquierda y derecha."""
+        r, c = pos
+        vision = []
+        # El orden debe coincidir siempre: UP, DOWN, LEFT, RIGHT
+        for action in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+            dr, dc = MOVE[action]
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < SIZE and 0 <= nc < SIZE:
+                tile = self.grid[nr][nc]
+                if tile == WALL: vision.append(0)    # 0 = Impasable (Pared)
+                elif tile == EMPTY: vision.append(1) # 1 = Costo 1 (Libre)
+                elif tile == DIRT: vision.append(2)  # 2 = Costo 2 (Lodo)
+            else:
+                vision.append(0) # Fuera del mapa cuenta como pared
+        return tuple(vision)
+
     def get_state(self, who='ia'):
+        """Genera un estado generalizado (sin coordenadas absolutas)."""
         if who == 'ia':
+            my_pos, en_pos = self.ia, self.hum
+            have_en_flag, en_has_my_flag = self.ia_flag, self.hum_flag
             goal = self.ia_goal()
-            d_goal = min(self.manh(self.ia, goal), 9)
-            d_opp = min(self.manh(self.ia, self.hum), 9)
-            return (self.ia, self.hum, int(self.ia_flag), int(self.hum_flag),
-                    self._rel_dir(self.ia, goal), d_goal, d_opp, self.ia_points)
+            pts = self.ia_points
         else:
+            my_pos, en_pos = self.hum, self.ia
+            have_en_flag, en_has_my_flag = self.hum_flag, self.ia_flag
             goal = self.hum_goal()
-            d_goal = min(self.manh(self.hum, goal), 9)
-            d_opp = min(self.manh(self.hum, self.ia), 9)
-            return (self.hum, self.ia, int(self.hum_flag), int(self.ia_flag),
-                    self._rel_dir(self.hum, goal), d_goal, d_opp, self.hum_points)
+            pts = self.hum_points
+
+        vision = self._get_local_vision(my_pos)
+        goal_dir = self._rel_dir(my_pos, goal)
+        en_dir = self._rel_dir(my_pos, en_pos)
+
+        # La IA ya no sabe en qué (x,y) está. Solo sabe lo que ve, qué banderas 
+        # están robadas, hacia dónde ir y cuántos puntos le quedan.
+        return (vision, int(have_en_flag), int(en_has_my_flag), goal_dir, en_dir, pts)
 
     def _try_move(self, pos, action, points):
         dr, dc = MOVE[action]
         npos = (pos[0]+dr, pos[1]+dc)
         if not self.passable(npos): return pos, True
-        c = COST[self.grid[npos[0]][npos[1]]]
-        if c > points: return pos, False
         return npos, False
 
     def _capture_logic(self):
@@ -118,7 +133,7 @@ class CTFEnv:
             if self.hum == h: self._send_home('hum')
 
     def step(self, action):
-        reward = -0.05 
+        reward = -1.0 # 1. RECOMPENSA: -1 por cada paso
         end_turn = False
         
         prev_goal_d_ia = self.manh(self.ia, self.ia_goal())
@@ -130,7 +145,6 @@ class CTFEnv:
             npos, choc = self._try_move(self.ia, action, self.ia_points)
             
             if choc:
-                reward -= 0.3 
                 self.ia_points -= 1 
             elif npos == self.ia:
                 end_turn = True 
@@ -138,25 +152,32 @@ class CTFEnv:
                 self.ia_points -= COST[self.grid[npos[0]][npos[1]]]
                 self.ia = npos
                 self._capture_logic()
+                
                 if self.ia == self.hum:
-                    reward += 1.0 
+                    # 2. RECOMPENSA: +1 por recuperar tu bandera (tocar al que la tiene)
+                    if self.hum_flag: reward += 1.0 
                     self._send_home('hum')
 
+            # 3. RECOMPENSA: +5 por agarrar bandera enemiga
             if self.ia_flag and not had_flag_ia: reward += 5.0
-            if self.manh(self.ia, self.ia_goal()) < prev_goal_d_ia: reward += 0.2
             
+            # 4. RECOMPENSA: +0.5 por acercarse, -0.5 por alejarse
+            new_goal_d = self.manh(self.ia, self.ia_goal())
+            if new_goal_d < prev_goal_d_ia: reward += 0.5
+            elif new_goal_d > prev_goal_d_ia: reward -= 0.5
+            
+            # 5. RECOMPENSA: +10 por ganar, -10 por perder
             if self.done:
-                reward += 50.0 if self.winner == 'ia' else -30.0
+                reward += 10.0 if self.winner == 'ia' else -10.0
                 return self.get_state('ia'), reward, True, {}
                 
             if self.ia_points <= 0: end_turn = True
             if end_turn: self.turn = 'hum'
 
-        else: 
+        else: # Turno de la IA 2 / Humano
             npos, choc = self._try_move(self.hum, action, self.hum_points)
             
             if choc:
-                reward -= 0.3 
                 self.hum_points -= 1 
             elif npos == self.hum:
                 end_turn = True 
@@ -164,15 +185,23 @@ class CTFEnv:
                 self.hum_points -= COST[self.grid[npos[0]][npos[1]]]
                 self.hum = npos
                 self._capture_logic()
+                
                 if self.hum == self.ia:
-                    reward += 1.0 
+                    # 2. RECOMPENSA: +1 por recuperar tu bandera (tocar al que la tiene)
+                    if self.ia_flag: reward += 1.0 
                     self._send_home('ia')
 
+            # 3. RECOMPENSA: +5 por agarrar bandera enemiga
             if self.hum_flag and not had_flag_hum: reward += 5.0
-            if self.manh(self.hum, self.hum_goal()) < prev_goal_d_hum: reward += 0.2
+            
+            # 4. RECOMPENSA: +0.5 por acercarse, -0.5 por alejarse
+            new_goal_d = self.manh(self.hum, self.hum_goal())
+            if new_goal_d < prev_goal_d_hum: reward += 0.5
+            elif new_goal_d > prev_goal_d_hum: reward -= 0.5
 
+            # 5. RECOMPENSA: +10 por ganar, -10 por perder
             if self.done:
-                reward += 50.0 if self.winner == 'humano' else -30.0
+                reward += 10.0 if self.winner == 'humano' else -10.0
                 return self.get_state('hum'), reward, True, {}
                 
             if self.hum_points <= 0: end_turn = True
