@@ -1,25 +1,16 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-# Environments
-.venv/
+# Entornos virtuales
 venv/
-ENV/
 env/
 
-# Q-Learning Models & Checkpoints
-*.pkl
-*.pickle
+# Archivos compilados de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# Docker logs
-*.log
-
-# IDEs and Editors
+# Configuraciones de editores
 .vscode/
 .idea/
-.obsidian/
+
+# Modelo entrenado
+*.pkl
